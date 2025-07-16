@@ -1,5 +1,4 @@
 name: Java CI with Gradle
-# main 브랜치에 push 혹은 pull request 가 merged 시 동작.
 on:
   push:
     branches: [ "main" ]
@@ -40,10 +39,10 @@ jobs:
       - name: docker Hub push
         run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo
 
-      # (3) CD : Docker 컨테이너 수행 1) Get GitHub IP
-      - name: get GitHub IP
-        id: ip
-        uses: haythem/public-ip@v1.2
+      # (3) CD : Docker 컨테이너 수행 1) Get GitHub IP - SSM 사용 시 불필요 (보안 그룹 인그레스/인그레스 규칙 불필요)
+      # - name: get GitHub IP
+      #   id: ip
+      #   uses: haythem/public-ip@v1.2
 
       # (3) CD : Docker 컨테이너 수행 2) Configure AWS Credentials - AWS 접근 권한 취득(IAM)
       - name: Configure AWS Credentials
@@ -53,28 +52,41 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-northeast-2
 
-      # (3) CD : Docker 컨테이너 수행 3) Add github ip to AWS
-      - name: Add GitHub IP to AWS
-        run: |
-          aws ec2 authorize-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      # (3) CD : Docker 컨테이너 수행 3) Add github ip to AWS - SSM 사용 시 불필요
+      # - name: Add GitHub IP to AWS
+      #   run: |
+      #     aws ec2 authorize-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
 
-      # (3) CD : Docker 컨테이너 수행 4) AWS EC2 Server Connect & Docker 명령어 실행
-      - name: AWS EC2 Connection
-        uses: appleboy/ssh-action@v0.1.6
+      # (3) CD : Docker 컨테이너 수행 4) AWS EC2 Server Connect & Docker 명령어 실행 (SSM 사용)
+      - name: Execute Docker Commands on EC2 via SSM
+        id: ssm_command
+        uses: aws-actions/aws-cli@v1 # AWS CLI 액션 사용
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          password: ${{ secrets.EC2_PASSWORD }}
-          port: ${{ secrets.EC2_SSH_PORT }}
-          timeout: 60s
-          script: |
-            sudo docker stop github-actions-demo || true # 컨테이너가 없을 때 에러 방지
-            sudo docker rm github-actions-demo || true  # 컨테이너가 없을 때 에러 방지
-            sudo docker rmi ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo || true # 이미지가 없을 때 에러 방지
-            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo # 주석 해제하여 풀
-            sudo docker run -d -p 8080:8080 --name github-actions-demo ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo
+          args: |
+            ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \ # EC2 인스턴스 ID 필요
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[\
+              \"sudo docker stop github-actions-demo || true\", \
+              \"sudo docker rm github-actions-demo || true\", \
+              \"sudo docker rmi ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo || true\", \
+              \"sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo\", \
+              \"sudo docker run -d -p 8080:8080 --name github-actions-demo ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo\"\
+            ]" \
+            --comment "Deploy Docker container via GitHub Actions" \
+            --output text
 
-      # (3) CD : Docker 컨테이너 수행 5) Remove Github IP from security group
-      - name: Remove IP FROM security group
-        run: |
-          aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      # (선택 사항) SSM 명령 실행 결과 확인 (명령이 성공했는지 확인)
+      - name: Get SSM Command Output
+        uses: aws-actions/aws-cli@v1
+        with:
+          args: |
+            ssm get-command-invocation \
+            --command-id "${{ steps.ssm_command.outputs.command-id }}" \
+            --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+            --query "StandardOutputContent" --output text
+
+      # (3) CD : Docker 컨테이너 수행 5) Remove Github IP from security group - SSM 사용 시 불필요
+      # - name: Remove IP FROM security group
+      #   run: |
+      #     aws ec2 revoke-security-group-ingress --group-id ${{ secrets.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
