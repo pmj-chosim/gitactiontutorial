@@ -1,5 +1,4 @@
 name: Java CI with Gradle
-
 # main 브랜치에 push 혹은 pull request 가 merged 시 동작.
 on:
   push:
@@ -8,7 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-      
+
     steps:
       # (1) 프로그램 빌드 (Java 빌드) 1) Java 및 Docker 빌드를 위한 환경 설정
       - uses: actions/checkout@v3
@@ -69,11 +68,11 @@ jobs:
           port: ${{ secrets.EC2_SSH_PORT }}
           timeout: 60s
           script: |
-            sudo docker stop github-actions-demo
-            sudo docker rm github-actions-demo
-            sudo docker rmi ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo
-#           sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo
-            sudo docker run -it -d -p 8080:8080 --name github-actions-demo ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo
+            sudo docker stop github-actions-demo || true # 컨테이너가 없을 때 에러 방지
+            sudo docker rm github-actions-demo || true  # 컨테이너가 없을 때 에러 방지
+            sudo docker rmi ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo || true # 이미지가 없을 때 에러 방지
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo # 주석 해제하여 풀
+            sudo docker run -d -p 8080:8080 --name github-actions-demo ${{ secrets.DOCKERHUB_USERNAME }}/github-actions-demo
 
       # (3) CD : Docker 컨테이너 수행 5) Remove Github IP from security group
       - name: Remove IP FROM security group
