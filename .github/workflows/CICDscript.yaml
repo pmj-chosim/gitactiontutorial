@@ -68,6 +68,7 @@ jobs:
           password: ${{ secrets.EC2_PASSWORD }}
           port: ${{ secrets.EC2_SSH_PORT }}
           timeout: 60s
+          debug: true
           script: |
             sudo docker stop github-actions-demo
             sudo docker rm github-actions-demo
