@@ -65,10 +65,10 @@ jobs:
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
-          password: ${{ secrets.EC2_PASSWORD }}
+          # password: ${{ secrets.EC2_PASSWORD }} # 이 줄을 삭제하거나 주석 처리합니다.
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }} # 2단계에서 추가한 Secret 이름을 사용합니다.
           port: ${{ secrets.EC2_SSH_PORT }}
           timeout: 60s
-          debug: true
           script: |
             sudo docker stop github-actions-demo
             sudo docker rm github-actions-demo
